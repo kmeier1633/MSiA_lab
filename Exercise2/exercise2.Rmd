@@ -1,0 +1,156 @@
+---
+title: "Analytics for Competitive Advantage: Lab Exercise 2"
+author: "Kristin Meier"
+date: "November 1, 2016"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+```{r, echo=FALSE}
+filepath <- "/Users/kmeier92/Documents/Northwestern/fall2016/Competitive_Analytics/labs/exercises/data/"
+```
+  
+# Problem 1
+**Calculate averages of RS and SD by ignoring the missing values.**
+
+```{r}
+wine <- read.table(paste(filepath,"ex2_redwine.txt",sep=""),stringsAsFactors = F,header=T)
+
+avg.RS <- mean(wine$RS,na.rm=T)
+avg.SD <- mean(wine$SD,na.rm=T)
+```
+
+Ignoring missing values, the averages of RS and SD are `r round(avg.RS,3)` and `r round(avg.SD,3)`, respectively.
+
+# Problem 2
+**Create vectors of SD.obs and FS.obs by omitting observations with missing values in SD. Build linear regression model to estimate SD.obs (response) using FS.obs (explanatory). Print coefficients.**
+```{r}
+
+SD.obs <- wine$SD[!is.na(wine$SD)]
+FS.obs <- wine$FS[!is.na(wine$SD)]
+
+fit.SD.FS <- lm(SD.obs~FS.obs)
+
+coef.fit.SD.FS <- coefficients(fit.SD.FS)
+
+coef.fit.SD.FS
+```
+
+The intercept is `r round(coefficients(fit.SD.FS)[1],3)` and the coefficient for FS is `r round(coefficients(fit.SD.FS)[2],3)`. The model is $SD = `r round(coefficients(fit.SD.FS)[1],3)` + `r round(coefficients(fit.SD.FS)[2],3)`FS$.
+
+# Problem 3
+**Create a vector (of length 17) of estimated SD values using the regression model in Problem 2 and FS values of the observations with missing SD values. Impute missing values of SD using the created vector. Print out the average of SD after the imputation.**
+
+```{r}
+# First get the vector of FS values where SD is missing
+FS.obs2 <- wine$FS[is.na(wine$SD)]
+# Fit the SD values using the linear regression model 
+fit.SD <- coef.fit.SD.FS[1] + coef.fit.SD.FS[2]*FS.obs2
+# impute the missin values of SD in original data
+wine$SD[is.na(wine$SD)] <- fit.SD
+# Find new average
+avg.SD.noNA <- mean(wine$SD)
+
+avg.SD.noNA
+```
+
+The new SD average with the imputed values is `r round(avg.SD.noNA,3)`.
+
+# Problem 4
+**Impute missing values of RS using the average value imputation method from the lab. Print out the average of RS after the imputation.**
+```{r}
+# replace RS missing values with the average
+wine$RS[is.na(wine$RS)] <- avg.RS
+avg.RS.noNA <- mean(wine$RS)
+
+avg.RS.noNA
+```
+
+The new RS average with the imputed values is `r round(avg.RS.noNA,3)`.
+
+# Problem 5
+**Build multiple linear regression model for the new dataset and save it as winemodel. Print out the coeficients of the regression model.**
+
+```{r}
+
+winemodel <- lm(QA ~ FA + VA + CA + RS + CH + FS + SD + DE + PH + SU + AL, wine)
+coef.winemodel <- round(coefficients(winemodel),3)
+coef.winemodel
+
+```
+
+The model is:
+
+$QA = `r coef.winemodel[1]` + `r coef.winemodel[2]`FA + `r coef.winemodel[3]`VA + `r coef.winemodel[4]`CA + `r coef.winemodel[5]`RS + `r coef.winemodel[6]`CH + `r coef.winemodel[7]`FS + `r coef.winemodel[8]`SD + `r coef.winemodel[9]`DE + `r coef.winemodel[10]`PH + `r coef.winemodel[11]`SU + `r coef.winemodel[12]`AL$
+
+# Problem 6
+**Print out the summary of the model. Pick one attribute that is least likely to be related to QA based on p-values.**
+```{r}
+
+summary(winemodel)
+
+# Find which has the max p-value
+pvals.winemodel <- summary(winemodel)$coefficients[,4]
+max.var <- rownames(summary(winemodel)$coefficients)[which(pvals.winemodel == max(pvals.winemodel))]
+```
+
+The attribute that is least likely to be related to QA based on p-values is `r max.var` with a p-value of `r round(max(pvals.winemodel),3)`.
+
+# Problem 7
+**Perform 5-fold cross validation for the model you just built. Print out the average error rate.**
+```{r}
+library(DAAG)
+
+wine.validation <- CVlm(data=wine, m=5, 
+                   form.lm=formula(QA ~ FA + VA + CA + RS + CH + FS + SD + DE + PH + SU + AL),
+                   printit=F, plotit=T)
+
+# average error rate
+# (actual-pred)^2
+avg.err <- round(mean((wine.validation$QA - wine.validation$cvpred)^2),3)
+avg.err.check <- round(attr(wine.validation,"ms"),3)
+```
+
+The average error rate is `r avg.err`.
+
+# Problem 8
+**Mr. Klabjan is informed that the attribute picked in Problem 6 actually contains outliers. Calculate the average and standard deviation of the selected attribute. Create a new data set after removing observations that is outside of the range [avg-3sd; avg+3sd] and name the data set as redwine2. Print out the dimension of redwine2 to know how many observations are removed.**
+```{r}
+# PH was chosen above
+avg.PH <- mean(wine$PH)
+sd.PH <- sd(wine$PH)
+PH.range.min <- avg.PH - 3*sd.PH
+PH.range.max <- avg.PH + 3*sd.PH
+
+redwine2 <- wine[(wine$PH > PH.range.min & wine$PH < PH.range.max),]
+dim(redwine2)
+```
+
+The range for PH is `r round(PH.range.min,3)` to `r round(PH.range.max,3)`. After removing observations outside of this range, the new dataset, redwine2, has dimenstions `r dim(redwine2)[1]` x `r dim(redwine2)[2]`.
+
+# Problem 9
+**Build regression model winemodel2 using the new data set from Problem 8 and print out the summary. Compare this model with the model obtained in Problem 6 and decide which one is better. Pick 5 attributes that is most likely to be related to QA based on p-values.**
+```{r}
+winemodel2 <- lm(QA ~ FA + VA + CA + RS + CH + FS + SD + DE + PH + SU + AL, redwine2)
+coef.winemodel2 <- round(coefficients(winemodel2),3)
+summary(winemodel2)
+
+# 
+# Find which have the min 5 p-values
+pvals.winemodel2 <- summary(winemodel2)$coefficients[,4]
+min5 <- sort(pvals.winemodel2)[1:5]
+min.val <- rownames(summary(winemodel2)$coefficients)[which(pvals.winemodel2 %in% min5)]
+
+min.val
+```
+
+The new model is:
+
+$QA = `r coef.winemodel2[1]` + `r coef.winemodel2[2]`FA + `r coef.winemodel2[3]`VA + `r coef.winemodel2[4]`CA + `r coef.winemodel2[5]`RS + `r coef.winemodel2[6]`CH + `r coef.winemodel2[7]`FS + `r coef.winemodel2[8]`SD + `r coef.winemodel2[9]`DE + `r coef.winemodel2[10]`PH + `r coef.winemodel2[11]`SU + `r coef.winemodel2[12]`AL$
+
+Compared to the original model with an $R^2$ of `r round(summary(winemodel)$r.squared,3)`, this one has an $R^2$ value of `r round(summary(winemodel2)$r.squared,3)`, which means more of the variance in QA is explained by the new model. Also, the F-statistic of the new model is `r round(summary(winemodel2)$fstatistic[1],3)`, which is larger and more significant than that of the original model (`r round(summary(winemodel)$fstatistic[1],3)`).
+
+The 5 attributes most likely to be related to QA are the 5 with the lowest p-values, `r min.val`.

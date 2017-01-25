@@ -1,0 +1,190 @@
+---
+title: "Analytics for Competitive Advantage: Lab Exercise 4"
+author: "Kristin Meier"
+date: "November 22, 2016"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r, echo=FALSE}
+filepath <- "/Users/kmeier92/Documents/Northwestern/fall2016/Competitive_Analytics/labs/exercises/data"
+# help
+# http://blog.revolutionanalytics.com/2016/01/getting-started-with-markov-chains.html
+# https://www.r-bloggers.com/getting-started-with-markov-chains/
+
+# install.packages("expm")
+library(expm,quietly = TRUE)
+```
+
+
+
+# Problem 1
+**In Markov100.txt, the one step transition probability matrix for a Markov chain with 100 states (State 1 to State 100) is given. Note that the data has no heading. Name of the data set Markov100. Number of rows 100. Number of columns 100**
+```{r}
+Markov100 <- read.table(file.path(filepath,"ex4_markov100.txt"),stringsAsFactors = F,header=F)
+```
+
+### Problem 1(a)
+**Suppose we are at State 1 now. Find and display the probability of being in State 5 after 10 transitions.**
+```{r}
+# at state 1 now = initial vector
+a = c(1,rep(0,99))
+P = as.matrix(Markov100)
+# Calculate prob distribution after 10 steps given initial vector 
+probDist10 <- a %*% (P %^%10)
+# state 5
+state5 <- probDist10[5]
+state5
+```
+
+### Problem 1(b)
+**Suppose we are at one of States 1,2, and 3 with equal probabilities. Find and display the probability of being in State 10 after 10 transitions.**
+```{r}
+# equal probabilities for 1,2,3
+three <- 1/3
+a2 = c(rep(three,3),rep(0,97))
+# Calculate prob distribution after 10 steps given initial vector 
+probDist10.2 <- a2 %*% (P %^%10)
+# state 10
+state10 <- probDist10.2[10]
+state10
+```
+
+
+### Problem 1(c)
+**Find the steady state probability of being in State 1.**
+```{r}
+# diag(n) # creates identity matrix with size n 
+# solve(M) # returns inverse of matrix M
+n = 100
+Q = t(P) - diag(n)
+Q[n,] = c(rep(1,n))
+rhs = c(rep(0,(n-1)),1)
+# steady state probabilities
+Pi = solve(Q) %*% rhs
+# state 1
+Pi[1]
+```
+
+### Problem 1(d)
+**Find the mean first passage time from State 1 to State 100.**
+```{r}
+# What is the expected number of steps to get to state 100?
+B = P[1:(n-1),1:(n-1)]
+Q = diag(n-1) - B
+e = c(rep(1,n-1))
+m = solve(Q) %*% e
+# mean steps from 1 to 100
+m[1]
+```
+
+# Problem 2
+**You are asked to analyze the data from an website with 8 pages. Let us assume that there is a virtual page 9 that a visitor must automatically visit when the visitor leaves the website. The visitors always start their visit from Page 1. Let us formulate a Markov chain for this website.**
+```{r}
+webtraffic <- read.table(file.path(filepath,"ex4_webtraffic.txt"),stringsAsFactors = F,header=T)
+```
+
+### Problem 2(a)
+**Construct 9 by 9 matrix Traffic that counts total traffic between State i to State j for all i and j. Display Traffic. Hint colSums() adds all rows for each column.**
+```{r}
+# Total traffic b/w state i to state j
+# 1000 rows are 1000 obs. so need to sum them up
+ij <- colSums(webtraffic)
+# now put them in order
+Traffic <- t(ij[1:9])
+for(i in 2:9){
+  Traffic <- rbind(Traffic,t(ij[((9*(i-1))+1):(9*i)]))
+}
+Traffic <- as.matrix(Traffic)
+listname <- seq(1,9)
+colnames(Traffic) <- paste("to",listname,sep="")
+rownames(Traffic) <- paste("from",listname,sep="")
+Traffic
+```
+
+### Problem 2(b)
+**Observe that Traffic has 0's in row 9 and 0's in column 1. Set Traffic[9,1]=1000. Construct the one step transition probability matrix P and display it.**
+```{r}
+Traffic[9,1] = 1000
+
+P = Traffic
+# prob matrix, x/n, n = row total
+rowtot <- rowSums(P)
+for(i in 1:9){
+  P[i,] <- P[i,]/rowtot[i]
+}
+P = round(P,4)
+P
+```
+
+### Problem 2(c)
+**Calculate and display the steady state probability vector Pi**
+```{r}
+n = 9
+Q = t(P) - diag(n)
+Q[n,] = c(rep(1,n))
+rhs = c(rep(0,(n-1)),1)
+# steady state probabilities
+Pi = solve(Q) %*% rhs
+rownames(Pi) = listname
+Pi
+```
+
+### Problem 2(d)
+**The following table presents the average time that the visitors spend on each page. Page 1 2 3 4 5 6 7 8. Avg(minute) 0.1 2 3 5 5 3 3 2. Calculate and display the average time a visitor spend on the website (until she leaves).**
+```{r}
+# calcualte first mean passage time
+# multiply that by the time
+avgpg <- c(0.1, 2, 3, 5, 5, 3, 3, 2)
+
+B = P[1:(n-1),1:(n-1)]
+Q = diag(n-1) - B
+# e is the average time spent on each page
+e = avgpg
+m = solve(Q) %*% e
+# mean time spent starting from pg 1
+passagevec <- t(m)
+timespent <- passagevec[1]
+timespent
+```
+
+### Problem 2(e)
+**In the output of Problem 2(c), observe that Pages 3 and 4 are one of the most crowded pages except Pages 1 and 9. To balance the traffic, the owner of the website decided to create links from Page 2 to Pages 6,7 (hence, from State 2 to States 6,7). By adding the links, the owner anticipates that, from Page 2, 30% of the current outgoing traffic to State 3 would move to State 6, and 20% of the current outgoing traffic to State 4 would move to State 7. Calculate new steady state probability vector Pi2 to check the effect of the new links. Decide if the link helped balancing the traffic by comparing the variance of Pi and Pi2. Hint Start with matrix Traffic from Problem 2(a).**
+```{r}
+# .3 2,3 -> 2,6
+#  .2 2,4 -> 2,7
+## first add the additional traffic to pg 6 and 7
+Traffic[2,6] <- Traffic[2,6] + .3*Traffic[2,3]
+Traffic[2,7] <- Traffic[2,7] + .2*Traffic[2,4]
+## next reduce the current traffic 
+Traffic[2,3] <- .7*Traffic[2,3]
+Traffic[2,4] <- .8*Traffic[2,4]
+
+## recalc prob. matrix
+P2 = Traffic
+# prob matrix, x/n, n = row total
+rowtot <- rowSums(P2)
+for(i in 1:9){
+  P2[i,] <- P2[i,]/rowtot[i]
+}
+P2 <- round(P2,4)
+
+## recalculate steady state prob 
+n = 9
+Q = t(P2) - diag(n)
+Q[n,] = c(rep(1,n))
+rhs = c(rep(0,(n-1)),1)
+# steady state probabilities
+Pi2 = solve(Q) %*% rhs
+rownames(Pi2) <- listname
+Pi2
+
+varPi = var(Pi)
+varPi2 = var(Pi2)
+varPi2 < varPi
+
+```
+
+The variance decreased slightly, from `r round(varPi,4)` to `r round(varPi2,4)`.
